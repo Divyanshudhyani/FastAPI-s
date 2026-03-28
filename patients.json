@@ -48,5 +48,16 @@
     "weight": 75.0,
     "bmi": 31.22,
     "verdict": "Obese"
+  },
+  "P006": {
+    "id": "P006",
+    "name": "John Doe",
+    "city": "New York",
+    "age": 32,
+    "gender": "Male",
+    "height": 175.5,
+    "weight": 70.5,
+    "bmi": 22.89,
+    "health_status": "Normal weight"
   }
 }

@@ -13,7 +13,7 @@ def insert_patient_data(name: str, age: int):  # type validation
 
 from typing import Annotated, Dict, List, Optional
 
-from pydantic import AnyUrl, BaseModel, EmailStr, Field, ValidationError
+from pydantic import AnyUrl, BaseModel, EmailStr, Field, ValidationError, computed_field, field_validator  , model_validator
 
 class Patient(BaseModel):
     # define ideal schema , (type validation)
@@ -25,6 +25,29 @@ class Patient(BaseModel):
     marrided: Annotated[bool, Field(default=False)]  # optional field with default value False
     allergies: Optional[List[str]] = None  # optional field with default value None
     contact_details: Dict[str, str] = {}  # optional field with default value empty dictionary
+
+    # field validator is used for only one field validation.
+    # model validator is used for multiple field validation. we can use both of them together in the same model.
+    # computed field is used to define a field that is computed based on other fields. it is not stored in the database but can be accessed like any other field.
+    @field_validator('email' , mode='before')
+    @classmethod
+    def validate_email(cls, value):
+        valid_domaiuns = ['gmail.com', 'yahoo.com', 'outlook.com']
+        if not value.endswith(tuple(valid_domaiuns)):
+            raise ValueError("Email must be a valid address.")
+        return value
+    
+    @model_validator(mode='before')
+    def validate_emergency_contact(cls, model):
+        if model.age > 60 and 'emergency_contact' not in model.contact_details:
+            raise ValueError("Emergency contact details are required for patients above 60 years old.")
+        
+    @computed_field  
+    @property
+    def calculate_bmi(self) -> Optional[float]:
+        if self.weight is not None and self.age is not None:
+            return self.weight / (self.age ** 2)  # just for demonstration, not actual BMI calculation
+        return None
 
 def insert_patient_data(patient: Patient):  # data validation
     print(f"Patient Name: {patient.name}, Age: {patient.age}, Weight: {patient.weight} , Married: {patient.marrided}, Allergies: {patient.allergies}, Contact Details: {patient.contact_details}")  
