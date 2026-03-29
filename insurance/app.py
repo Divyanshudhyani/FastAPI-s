@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import computed_field, Field, BaseModel
+from pydantic import computed_field, Field, BaseModel, field_validator
 from typing import Annotated
 import pandas as pd
 import joblib
@@ -59,6 +59,12 @@ class PatientInput(BaseModel):
     smoker: Annotated[bool, Field()]
     city: Annotated[str, Field()]
     occupation: Annotated[str, Field()]
+
+    @field_validator('city')
+    def validate_city(cls, v:str) -> str:
+        if not v.strip():
+            raise ValueError('City cannot be empty')
+        return v.strip().title()
     
     @computed_field
     @property
@@ -85,7 +91,23 @@ class PatientInput(BaseModel):
     def bmi_category(self) -> str:
         return bmi_category(self.bmi)
 
-model = joblib.load('model.pkl')
+model = joblib.load('model/model.pkl')
+
+# For tracking model version in production and track by (MLFLOW) monitoring tools like Prometheus, Grafana, etc.
+model_version = "1.0.0"
+
+# human readable endpoint for testing
+@app.get("/")
+def home():
+    return {"message": "Welcome to the Insurance Cost Prediction API. Use the /predict endpoint to get insurance cost predictions."}
+
+
+@app.get("/health")
+def health_check(): 
+    return {"status": "OK",
+             "model_version": model_version,
+             "model_loaded": model is not None
+            }
 
 @app.post("/predict")
 def predict_insurance_cost(patient: PatientInput):
