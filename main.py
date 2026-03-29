@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.responses import JSONResponse
-from pydantic import computed_field, Field, BaseModel
-from typing import Annotated, Literal  # Fixed import
+from pydantic import computed_field, Field, BaseModel, ValidationError
+from typing import Annotated, Literal, Optional
 import json
 
 app = FastAPI()
@@ -10,11 +10,11 @@ class Patient(BaseModel):
     id: Annotated[str, Field(
         ..., 
         description="The unique identifier for the patient", 
-        pattern=r"^P\d{3}$",  # Added pattern for validation
+        pattern=r"^P\d{3}$",
         examples=["P001"]
     )]
     name: Annotated[str, Field(
-        ...,  # Fixed: removed 'str' argument
+        ..., 
         min_length=1, 
         max_length=100, 
         title="Name of the Patient", 
@@ -22,7 +22,7 @@ class Patient(BaseModel):
         examples=["John Doe"]
     )]
     city: Annotated[str, Field(
-        ...,  # Fixed: removed 'str' argument
+        ..., 
         min_length=1, 
         max_length=100, 
         title="City of the Patient", 
@@ -74,6 +74,14 @@ class Patient(BaseModel):
             return "Overweight"
         else:
             return "Obese"
+
+class PatientUpdate(BaseModel):
+    name: Annotated[Optional[str], Field(default=None, min_length=1, max_length=100)]
+    city: Annotated[Optional[str], Field(default=None, min_length=1, max_length=100)]
+    age: Annotated[Optional[int], Field(default=None, gt=0, lt=120)]
+    gender: Annotated[Optional[Literal['Male', 'Female']], Field(default=None)]
+    height: Annotated[Optional[float], Field(default=None, gt=0)]
+    weight: Annotated[Optional[float], Field(default=None, gt=0)]
 
 def load_data():
     with open('patients.json', 'r') as f:
@@ -136,7 +144,7 @@ def create_patient(patient: Patient):
     data[patient.id] = patient.model_dump()
     
     with open('patients.json', 'w') as f:
-        json.dump(data, f, indent=2)  # Added indent for readability
+        json.dump(data, f, indent=2)
     
     return JSONResponse(
         content={
@@ -145,9 +153,68 @@ def create_patient(patient: Patient):
         }
     )
 
-# Optional: Add a GET endpoint to retrieve all patients with computed fields
 @app.get("/patients")
 def get_all_patients():
     """Get all patients with BMI and health status"""
     data = load_data()
     return data
+
+@app.put("/update/{patient_id}")
+def update_patient(
+    patient_id: str, 
+    patient_update: PatientUpdate
+):
+    data = load_data()
+    if patient_id not in data:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    # Get existing patient data and add the ID back
+    existing_data = data[patient_id].copy()
+    existing_data['id'] = patient_id
+    
+    # Get only the fields that were provided in the update
+    updated_data = patient_update.model_dump(exclude_unset=True)
+    
+    # Update the existing data dictionary
+    existing_data.update(updated_data)
+    
+    # Validate the updated data with Pydantic
+    try:
+        validated_patient = Patient(**existing_data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    
+    # Save back to file (keep id in stored data)
+    data[patient_id] = validated_patient.model_dump()
+    
+    with open('patients.json', 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    return JSONResponse(
+        content={
+            "message": "Patient updated successfully", 
+            "patient_id": patient_id,
+            "updated_fields": list(updated_data.keys())
+        }
+    )
+
+# Optional: Add DELETE endpoint
+@app.delete("/delete/{patient_id}")
+def delete_patient(
+    patient_id: str = Path(..., description="The ID of the patient to delete", examples=["P001"])
+):
+    data = load_data()
+    if patient_id not in data:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    del data[patient_id]
+    
+    with open('patients.json', 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    return JSONResponse(
+        content={
+            "message": "Patient deleted successfully", 
+            "patient_id": patient_id
+        }
+    )
